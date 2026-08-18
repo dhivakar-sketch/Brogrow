@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Brogrow | Athlete Portal</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;background:#070910;color:#eef0f7;display:grid;place-items:center;padding:24px}.wrap{width:min(480px,100%)}.brand{display:flex;align-items:center;gap:13px;margin-bottom:24px}.logo{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,#6366f1,#06b6d4);font-size:24px}.eyebrow{margin:0 0 5px;color:#8d94ff;font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase}.brand h1{margin:0;font-size:24px}.card{background:#11131c;border:1px solid rgba(255,255,255,.1);border-radius:22px;padding:28px;box-shadow:0 25px 80px #0008}.switch{display:grid;grid-template-columns:1fr 1fr;background:#080a10;border-radius:12px;padding:4px;margin-bottom:24px}.switch button{border:0;background:transparent;color:#818ba1;padding:11px;border-radius:9px;font-weight:800;cursor:pointer}.switch button.active{background:#252450;color:#a5aaff}.title{font-size:25px;font-weight:850;margin:0 0 7px}.sub{color:#8e97ab;font-size:13px;margin:0 0 22px;line-height:1.5}form{display:grid;gap:15px}label{display:grid;gap:7px;color:#a8b0c1;font-size:12px;font-weight:750}input,select{width:100%;border:1px solid rgba(255,255,255,.11);background:#080a10;color:#eef0f7;border-radius:11px;padding:13px;font:inherit;outline:none}input:focus,select:focus{border-color:#6366f1}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.primary{border:0;background:linear-gradient(135deg,#6366f1,#4f46e5);color:white;border-radius:11px;padding:14px;font-size:14px;font-weight:850;cursor:pointer}.primary:disabled{opacity:.6}.link{display:block;text-align:center;margin-top:17px;color:#8f98ff;font-size:12px;text-decoration:none}.message{min-height:18px;font-size:12px;color:#f59e0b}.sport-note{padding:11px 12px;border-radius:10px;background:#07181c;border:1px solid #0e4d56;color:#91dfe8;font-size:12px;line-height:1.45}.hidden{display:none}@media(max-width:520px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><div class="logo">🏆</div><div><p class="eyebrow">Brogrow Athlete Portal</p><h1>Sports Talent Intelligence</h1></div></div>
+  <div class="card">
+    <div class="switch"><button id="loginTab" class="active">Athlete Login</button><button id="registerTab">Create Athlete Account</button></div>
+    <h2 class="title" id="title">Welcome back, Athlete</h2>
+    <p class="sub" id="sub">Sign in to view your performance, assessments, insights and progress across your sport.</p>
+    <form id="form">
+      <div id="nameFields" class="grid hidden"><label>First name<input id="firstName"></label><label>Last name<input id="lastName"></label></div>
+      <label>Email address<input id="email" type="email" required autocomplete="email"></label>
+      <label>Password<input id="password" type="password" required autocomplete="current-password"></label>
+      <div id="sportField" class="hidden">
+        <label>Primary sport
+          <select id="sport"><option>Cricket</option><option>Football</option><option>Basketball</option><option>Athletics</option><option>Volleyball</option><option>Tennis</option><option>Hockey</option><option>Swimming</option><option>Rugby</option></select>
+        </label>
+        <div class="sport-note" style="margin-top:9px">Your sport controls the assessment metrics shown later. You can use the same Athlete Portal for every supported sport.</div>
+      </div>
+      <div class="message" id="message"></div>
+      <button class="primary" id="submit" type="submit">Login as Athlete</button>
+    </form>
+    <a class="link" href="/staff.html">Are you a Coach, Academy or Admin? → Staff Portal</a>
+  </div>
+</div>
+<script>
+const API='http://localhost:8080/api';let mode='login';
+const $=id=>document.getElementById(id);const loginTab=$('loginTab'),registerTab=$('registerTab');
+function setMode(next){mode=next;loginTab.classList.toggle('active',mode==='login');registerTab.classList.toggle('active',mode==='register');$('nameFields').classList.toggle('hidden',mode!=='register');$('sportField').classList.toggle('hidden',mode!=='register');$('title').textContent=mode==='register'?'Create your Athlete Account':'Welcome back, Athlete';$('sub').textContent=mode==='register'?'Register once, choose your sport, and access your personal talent dashboard.':'Sign in to view your performance, assessments, insights and progress across your sport.';$('submit').textContent=mode==='register'?'Create Athlete Account':'Login as Athlete';$('message').textContent=''}
+loginTab.onclick=()=>setMode('login');registerTab.onclick=()=>setMode('register');
+$('form').onsubmit=async e=>{e.preventDefault();$('submit').disabled=true;$('message').textContent='Connecting…';try{let body;if(mode==='register'){body={firstName:$('firstName').value.trim(),lastName:$('lastName').value.trim(),email:$('email').value.trim(),password:$('password').value,role:'ATHLETE'}}else body={email:$('email').value.trim(),password:$('password').value};let r=await fetch(`${API}/auth/${mode==='register'?'register':'login'}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let data=await r.json();if(!r.ok)throw new Error(data.message||data.error||'Authentication failed');localStorage.setItem('sportsTalentAuth',data.token);localStorage.setItem('sportsTalentRole','ATHLETE');localStorage.setItem('sportsTalentName',`${data.firstName||$('firstName').value} ${data.lastName||$('lastName').value}`.trim()||$('email').value);if(mode==='register'){try{await fetch(`${API}/athletes/profile`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${data.token}`},body:JSON.stringify({athleteName:`${$('firstName').value.trim()} ${$('lastName').value.trim()}`.trim(),primarySport:$('sport').value,privacyEnabled:true})})}catch(e){} }location.href='/';}catch(err){$('message').textContent=err.message}finally{$('submit').disabled=false}}
+</script>
+</body>
+</html>
