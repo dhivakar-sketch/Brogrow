@@ -9,7 +9,11 @@ import com.sportstalent.backend.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -82,6 +86,39 @@ public class CoachController {
                 Comparator.reverseOrder()));
 
         return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/assessments/{assessmentId}/verify")
+    @Transactional
+    public ResponseEntity<?> verifyAssessment(@PathVariable Long assessmentId,
+                                               @RequestBody(required = false) Map<String, String> body,
+                                               Authentication authentication) {
+        if (!isCoachRole(authentication)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Coach access required"));
+        }
+
+        Assessment assessment = assessmentRepository.findById(assessmentId).orElse(null);
+        if (assessment == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Assessment not found"));
+        }
+
+        boolean approved = body == null || !"false".equalsIgnoreCase(body.get("approved"));
+        assessment.setCoachVerified(approved);
+
+        if (body != null && body.get("comment") != null && !body.get("comment").isBlank()) {
+            String existing = assessment.getNotes();
+            String coachNote = "Coach review: " + body.get("comment").trim();
+            assessment.setNotes(existing == null || existing.isBlank() ? coachNote : existing + "\n\n" + coachNote);
+        }
+
+        Assessment saved = assessmentRepository.save(assessment);
+        return ResponseEntity.ok(Map.of(
+                "assessmentId", saved.getId(),
+                "coachVerified", saved.isCoachVerified(),
+                "status", saved.isCoachVerified() ? "Coach verified" : "Needs re-assessment"
+        ));
     }
 
     private boolean isCoachRole(Authentication authentication) {
