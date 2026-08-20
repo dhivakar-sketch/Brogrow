@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
+import PlayerProfileReport from './PlayerProfileReport'
 
 const API_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:8080/api').replace(/\/$/, '')
 const TOKEN_KEY = 'sportsTalentAuth'
 
-function SquadOverview({ athletes }) {
+function SquadOverview({ athletes, onView }) {
   return (
     <>
       {athletes.length === 0 ? (
@@ -13,7 +14,7 @@ function SquadOverview({ athletes }) {
         const score = Number(athlete.score ?? athlete.weightedScore ?? 0)
         const trend = athlete.trend || '0.0%'
         return (
-          <div key={`${athlete.id || athlete.assessmentId || athlete.name}-${athlete.sport || ''}`} className="coach-item">
+          <div key={`${athlete.id || athlete.assessmentId || athlete.name}-${athlete.sport || ''}`} className="coach-item" onClick={() => onView?.(athlete)} style={{ cursor: 'pointer' }} title="Open player report">
             <div><strong>{athlete.name || 'Athlete'}</strong><small>{athlete.sport || 'Sport'}</small></div>
             <div><strong style={{ color: score >= 85 ? '#22c55e' : score >= 70 ? '#06b6d4' : '#6366f1' }}>{score.toFixed(1)}</strong><small>{athlete.status || 'Pending review'}</small></div>
             <span className={String(trend).startsWith('+') ? 'trend-up' : 'trend-down'}>{trend}</span>
@@ -31,6 +32,7 @@ export default function CoachVerificationPanel({ onApprove, onReject }) {
   const [saving, setSaving] = useState(false)
   const [reviews, setReviews] = useState({})
   const [selected, setSelected] = useState(null)
+  const [reportAthlete, setReportAthlete] = useState(null)
   const [squadTarget, setSquadTarget] = useState(null)
 
   const loadAthletes = async () => {
@@ -53,8 +55,6 @@ export default function CoachVerificationPanel({ onApprove, onReject }) {
 
   useEffect(() => { loadAthletes() }, [])
 
-  // Reuse the existing right-hand Squad Overview panel from App.jsx, but hide
-  // its old demo rows and render the same live database data into that panel.
   useEffect(() => {
     const target = document.querySelector('.coach-list')
     if (!target) return
@@ -77,6 +77,7 @@ export default function CoachVerificationPanel({ onApprove, onReject }) {
   }, [athletes, reviews])
 
   const openReview = (athlete, action) => setSelected({ athlete, action, comment: '' })
+  const openReport = (athlete) => setReportAthlete(athlete)
 
   const confirmReview = async () => {
     if (!selected || saving) return
@@ -94,7 +95,7 @@ export default function CoachVerificationPanel({ onApprove, onReject }) {
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.message || `Verification failed (${response.status}).`)
       const nextStatus = action === 'approved' ? 'Coach verified' : 'Needs re-assessment'
-      setAthletes((current) => current.map((item) => (item.assessmentId || item.id) === assessmentId ? { ...item, status: nextStatus } : item))
+      setAthletes((current) => current.map((item) => (item.assessmentId || item.id) === assessmentId ? { ...item, status: nextStatus, coachVerified: action === 'approved' } : item))
       setReviews((current) => ({ ...current, [assessmentId]: { status: action } }))
       if (action === 'approved') onApprove?.(athlete)
       else onReject?.(athlete)
@@ -105,6 +106,25 @@ export default function CoachVerificationPanel({ onApprove, onReject }) {
       setSaving(false)
     }
   }
+
+  const reportProfile = reportAthlete ? {
+    athleteName: reportAthlete.name || 'Athlete',
+    primarySport: reportAthlete.sport,
+    skillLevel: reportAthlete.skillLevel,
+    yearsOfTraining: reportAthlete.yearsOfTraining,
+    playingPosition: reportAthlete.playingPosition,
+    academyName: reportAthlete.academyName,
+    coachName: reportAthlete.coachName,
+  } : {}
+
+  const reportAssessment = reportAthlete ? {
+    ...reportAthlete,
+    assessedAt: reportAthlete.assessedAt || reportAthlete.createdAt,
+    score: reportAthlete.score,
+    weightedScore: reportAthlete.weightedScore,
+    coachVerified: reportAthlete.coachVerified || reportAthlete.status === 'Coach verified',
+    metricsJson: reportAthlete.metricsJson || reportAthlete.metrics || {},
+  } : null
 
   return (
     <div className="panel">
@@ -132,7 +152,7 @@ export default function CoachVerificationPanel({ onApprove, onReject }) {
               <div className={`verification-card coach-review-${serverVerified || review?.status === 'approved' ? 'approved' : rejected ? 'rejected' : 'pending'}`} key={id}>
                 <div className="coach-athlete-info"><strong>{athlete.name || 'Athlete'}</strong><small>{athlete.sport || 'Sport'}{athlete.category ? ` · ${athlete.category}` : ''}</small><span className="coach-review-status">{statusLabel}</span></div>
                 <div className="verification-score"><span>Latest score</span><strong>{Number(athlete.score ?? athlete.weightedScore ?? 0).toFixed(1)}</strong><small>{athlete.trend || '0.0%'} trend</small></div>
-                {!serverVerified && !rejected ? <div className="verification-actions"><button className="ghost-btn" type="button" onClick={() => openReview(athlete, 'rejected')}>Reject</button><button className="primary-btn" type="button" onClick={() => openReview(athlete, 'approved')}>Approve</button></div> : <button className="ghost-btn" type="button" onClick={() => openReview(athlete, serverVerified ? 'rejected' : 'approved')}>Change decision</button>}
+                <div className="verification-actions"><button className="ghost-btn" type="button" onClick={() => openReport(athlete)}>View report</button>{!serverVerified && !rejected ? <><button className="ghost-btn" type="button" onClick={() => openReview(athlete, 'rejected')}>Reject</button><button className="primary-btn" type="button" onClick={() => openReview(athlete, 'approved')}>Approve</button></> : <button className="ghost-btn" type="button" onClick={() => openReview(athlete, serverVerified ? 'rejected' : 'approved')}>Change decision</button>}</div>
               </div>
             )
           })}
@@ -150,7 +170,16 @@ export default function CoachVerificationPanel({ onApprove, onReject }) {
         </div>
       )}
 
-      {squadTarget && createPortal(<SquadOverview athletes={athletes} />, squadTarget)}
+      {reportAthlete && (
+        <div className="coach-review-modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setReportAthlete(null)}>
+          <div className="coach-review-modal player-report-modal" role="dialog" aria-modal="true">
+            <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:10 }}><button className="ghost-btn" type="button" onClick={() => setReportAthlete(null)}>✕ Close report</button></div>
+            <PlayerProfileReport profile={reportProfile} athleteName={reportAthlete.name || 'Athlete'} assessments={reportAssessment ? [reportAssessment] : []} insights={[]} />
+          </div>
+        </div>
+      )}
+
+      {squadTarget && createPortal(<SquadOverview athletes={athletes} onView={openReport} />, squadTarget)}
     </div>
   )
 }
