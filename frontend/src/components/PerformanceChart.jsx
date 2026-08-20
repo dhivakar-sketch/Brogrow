@@ -25,8 +25,12 @@ export default function PerformanceChart({ data = [] }) {
     const allowed = roleTabs[role] || roleTabs.ATHLETE
     const tabButtons = Array.from(document.querySelectorAll('.tabs .tab-btn'))
     tabButtons.forEach((button) => {
-      const text = button.textContent?.replace(/[⬡◎⊞◷◈✦]/g, '').trim()
-      button.style.display = allowed.some((name) => text?.includes(name)) ? '' : 'none'
+      const rawText = button.textContent?.replace(/[⬡◎⊞◷◈✦]/g, '').trim() || ''
+      const isAllowed = allowed.some((name) => rawText.includes(name))
+      button.style.display = isAllowed ? '' : 'none'
+      if (rawText.includes('Coach Panel')) {
+        button.textContent = role === 'ACADEMY' ? '▣ Academy' : role === 'ADMIN' ? '⚙ Admin' : '✦ Coach Panel'
+      }
     })
     return () => tabButtons.forEach((button) => { button.style.display = '' })
   }, [role])
@@ -41,7 +45,7 @@ export default function PerformanceChart({ data = [] }) {
         <div className="metric-card green"><span>Sports tracked</span><strong>{trackedSports.length}</strong><small>Active sports</small></div>
         <div className="metric-card warm"><span>Latest score</span><strong>{hasData ? Number(data[data.length - 1].value || 0).toFixed(1) : '—'}</strong><small>Most recent record</small></div>
       </div>
-      <div className="insight-box" style={{ marginTop: 14 }}><strong>{isAcademy ? 'Academy decision support' : 'System status'}</strong><p>{isAcademy ? 'Use the Coach Panel to review athlete performance, verification status and player reports. Athlete assessment entry is intentionally kept out of the academy workspace.' : 'Use the Coach Panel for operational review. Athlete assessment entry remains restricted to athlete accounts.'}</p></div>
+      <div className="insight-box" style={{ marginTop: 14 }}><strong>{isAcademy ? 'Academy decision support' : 'System status'}</strong><p>{isAcademy ? 'Use the Academy workspace to monitor athletes, coaches, verification status and player reports. Assessment entry is restricted to athlete accounts.' : 'Use the Admin workspace for operational review. Athlete assessment entry remains restricted to athlete accounts.'}</p></div>
     </div>
   }
 
