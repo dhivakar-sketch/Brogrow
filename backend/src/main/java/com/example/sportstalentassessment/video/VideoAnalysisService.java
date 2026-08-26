@@ -38,30 +38,28 @@ public class VideoAnalysisService {
     public void markProcessing(String jobId, String sport) {
         VideoAnalysisResult current = jobs.get(jobId);
         if (current == null) return;
-        jobs.put(jobId, new VideoAnalysisResult(
-                current.jobId(), "PROCESSING", sport == null ? current.sport() : sport,
-                current.frames(), current.fps(), current.poseDetectionRate(),
-                current.averageLandmarkVisibility(), current.findings()
-        ));
+        jobs.put(jobId, new VideoAnalysisResult(current.jobId(), "PROCESSING",
+                sport == null ? current.sport() : sport, current.frames(), current.fps(),
+                current.poseDetectionRate(), current.averageLandmarkVisibility(), current.findings()));
     }
 
-    public void markAnalyzed(String jobId, String sport, int frames, double fps) {
+    public void markAnalyzed(String jobId, String sport, int frames, double fps,
+                             int poseDetectedFrames, int sampledFrames,
+                             List<VideoAnalysisResult.VideoFinding> findings) {
         VideoAnalysisResult current = jobs.get(jobId);
         if (current == null) return;
-        jobs.put(jobId, new VideoAnalysisResult(
-                current.jobId(), "ANALYZED", sport == null ? current.sport() : sport,
-                frames, fps, 0, 0, List.of()
-        ));
+        double detectionRate = sampledFrames > 0 ? (poseDetectedFrames * 100.0 / sampledFrames) : 0.0;
+        jobs.put(jobId, new VideoAnalysisResult(current.jobId(), "ANALYZED",
+                sport == null ? current.sport() : sport, frames, fps,
+                detectionRate, 0, findings == null ? List.of() : List.copyOf(findings)));
     }
 
     public void markFailed(String jobId, String sport) {
         VideoAnalysisResult current = jobs.get(jobId);
         if (current == null) return;
-        jobs.put(jobId, new VideoAnalysisResult(
-                current.jobId(), "FAILED", sport == null ? current.sport() : sport,
-                current.frames(), current.fps(), current.poseDetectionRate(),
-                current.averageLandmarkVisibility(), List.of()
-        ));
+        jobs.put(jobId, new VideoAnalysisResult(current.jobId(), "FAILED",
+                sport == null ? current.sport() : sport, current.frames(), current.fps(),
+                current.poseDetectionRate(), current.averageLandmarkVisibility(), List.of()));
     }
 
     public VideoAnalysisResult get(String jobId) { return jobs.get(jobId); }
