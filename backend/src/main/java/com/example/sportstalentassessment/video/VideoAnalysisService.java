@@ -20,39 +20,41 @@ public class VideoAnalysisService {
     private final Map<String, VideoAnalysisResult> jobs = new ConcurrentHashMap<>();
 
     public VideoAnalysisResult submit(MultipartFile video, String athleteId, String sport) throws IOException {
-        if (video == null || video.isEmpty()) {
-            throw new IllegalArgumentException("Video file is required.");
-        }
-        if (video.getSize() > MAX_BYTES) {
-            throw new IllegalArgumentException("Video must be 100 MB or smaller.");
-        }
+        if (video == null || video.isEmpty()) throw new IllegalArgumentException("Video file is required.");
+        if (video.getSize() > MAX_BYTES) throw new IllegalArgumentException("Video must be 100 MB or smaller.");
         String contentType = video.getContentType();
-        if (contentType == null || !contentType.startsWith("video/")) {
-            throw new IllegalArgumentException("Only video files are supported.");
-        }
+        if (contentType == null || !contentType.startsWith("video/")) throw new IllegalArgumentException("Only video files are supported.");
 
         Files.createDirectories(UPLOAD_DIR);
         String jobId = UUID.randomUUID().toString();
-        String extension = extension(video.getOriginalFilename());
-        Path destination = UPLOAD_DIR.resolve(jobId + extension);
+        Path destination = UPLOAD_DIR.resolve(jobId + extension(video.getOriginalFilename()));
         Files.copy(video.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
 
-        VideoAnalysisResult queued = new VideoAnalysisResult(
-                jobId,
-                "QUEUED",
-                sport == null ? "" : sport,
-                0,
-                0,
-                0,
-                0,
-                List.of()
-        );
+        VideoAnalysisResult queued = new VideoAnalysisResult(jobId, "QUEUED", sport == null ? "" : sport, 0, 0, 0, 0, List.of());
         jobs.put(jobId, queued);
         return queued;
     }
 
-    public VideoAnalysisResult get(String jobId) {
-        return jobs.get(jobId);
+    public void markProcessing(String jobId, String sport) {
+        VideoAnalysisResult current = jobs.get(jobId);
+        if (current == null) return;
+        jobs.put(jobId, new VideoAnalysisResult(
+                current.jobId(), "PROCESSING", sport == null ? current.sport() : sport,
+                current.frames(), current.fps(), current.poseDetectionRate(),
+                current.averageLandmarkVisibility(), current.findings()
+        ));
+    }
+
+    public VideoAnalysisResult get(String jobId) { return jobs.get(jobId); }
+
+    public Path getVideoPath(String jobId) {
+        try {
+            return Files.list(UPLOAD_DIR)
+                    .filter(path -> path.getFileName().toString().startsWith(jobId + "."))
+                    .findFirst().orElse(null);
+        } catch (IOException e) {
+            return null;
+        }
     }
 
     private String extension(String name) {
