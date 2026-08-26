@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Map;
 
 @RestController
@@ -13,9 +14,11 @@ import java.util.Map;
 @CrossOrigin(origins = "http://localhost:5173")
 public class VideoAnalysisController {
     private final VideoAnalysisService service;
+    private final VideoProcessingService processingService;
 
-    public VideoAnalysisController(VideoAnalysisService service) {
+    public VideoAnalysisController(VideoAnalysisService service, VideoProcessingService processingService) {
         this.service = service;
+        this.processingService = processingService;
     }
 
     @PostMapping(consumes = "multipart/form-data")
@@ -24,7 +27,14 @@ public class VideoAnalysisController {
             @RequestParam(required = false) String athleteId,
             @RequestParam(required = false) String sport) {
         try {
-            return ResponseEntity.accepted().body(service.submit(video, athleteId, sport));
+            VideoAnalysisResult queued = service.submit(video, athleteId, sport);
+            Path videoPath = service.getVideoPath(queued.jobId());
+            if (videoPath == null) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(Map.of("message", "Uploaded video could not be located."));
+            }
+            processingService.process(queued.jobId(), videoPath, sport);
+            return ResponseEntity.accepted().body(queued);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (IOException e) {
@@ -36,9 +46,7 @@ public class VideoAnalysisController {
     @GetMapping("/{jobId}")
     public ResponseEntity<?> get(@PathVariable String jobId) {
         VideoAnalysisResult result = service.get(jobId);
-        if (result == null) {
-            return ResponseEntity.notFound().build();
-        }
+        if (result == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(result);
     }
 }
