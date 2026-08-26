@@ -45,6 +45,25 @@ public class VideoAnalysisService {
         ));
     }
 
+    public void markAnalyzed(String jobId, String sport, int frames, double fps) {
+        VideoAnalysisResult current = jobs.get(jobId);
+        if (current == null) return;
+        jobs.put(jobId, new VideoAnalysisResult(
+                current.jobId(), "ANALYZED", sport == null ? current.sport() : sport,
+                frames, fps, 0, 0, List.of()
+        ));
+    }
+
+    public void markFailed(String jobId, String sport) {
+        VideoAnalysisResult current = jobs.get(jobId);
+        if (current == null) return;
+        jobs.put(jobId, new VideoAnalysisResult(
+                current.jobId(), "FAILED", sport == null ? current.sport() : sport,
+                current.frames(), current.fps(), current.poseDetectionRate(),
+                current.averageLandmarkVisibility(), List.of()
+        ));
+    }
+
     public VideoAnalysisResult get(String jobId) { return jobs.get(jobId); }
 
     public Path getVideoPath(String jobId) {
