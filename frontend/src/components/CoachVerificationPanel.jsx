@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import PlayerProfileReport from './PlayerProfileReport'
+import AcademyDashboard from './AcademyDashboard'
 
 const API_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:8080/api').replace(/\/$/, '')
 const TOKEN_KEY = 'sportsTalentAuth'
@@ -26,6 +27,10 @@ function SquadOverview({ athletes, onView }) {
 }
 
 export default function CoachVerificationPanel({ onApprove, onReject }) {
+  if (localStorage.getItem('sportsTalentRole') === 'ACADEMY') {
+    return <AcademyDashboard />
+  }
+
   const [athletes, setAthletes] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
