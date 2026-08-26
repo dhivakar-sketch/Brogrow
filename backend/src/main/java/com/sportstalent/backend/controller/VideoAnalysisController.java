@@ -1,7 +1,6 @@
 package com.sportstalent.backend.controller;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.io.IOException;
 import java.util.Map;
 
 import org.springframework.http.HttpStatus;
@@ -13,18 +12,23 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.sportstalent.backend.service.VideoAnalysisService;
+
 @RestController
 @RequestMapping("/api/video-analysis")
 public class VideoAnalysisController {
-
     private static final long MAX_VIDEO_BYTES = 100L * 1024L * 1024L;
+    private final VideoAnalysisService videoAnalysisService;
+
+    public VideoAnalysisController(VideoAnalysisService videoAnalysisService) {
+        this.videoAnalysisService = videoAnalysisService;
+    }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> analyze(
             @RequestParam("video") MultipartFile video,
             @RequestParam(value = "athleteId", required = false) String athleteId,
             @RequestParam(value = "sport", required = false) String sport) {
-
         if (video == null || video.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("message", "Please upload a video."));
         }
@@ -36,20 +40,11 @@ public class VideoAnalysisController {
         if (contentType == null || !contentType.toLowerCase().startsWith("video/")) {
             return ResponseEntity.badRequest().body(Map.of("message", "Only video files are supported."));
         }
-
-        // Processing pipeline will be connected to OpenCV/MediaPipe in the next stage.
-        // The API intentionally returns no fabricated AI score or errors.
-        List<Object> issues = new ArrayList<>();
-        return ResponseEntity.ok(Map.of(
-                "status", "UPLOADED",
-                "message", "Video received successfully. AI processing pipeline is ready to be connected.",
-                "athleteId", athleteId == null ? "" : athleteId,
-                "sport", sport == null ? "" : sport,
-                "fileName", video.getOriginalFilename() == null ? "video" : video.getOriginalFilename(),
-                "sizeBytes", video.getSize(),
-                "score", 0,
-                "confidence", 0,
-                "issues", issues
-        ));
+        try {
+            return ResponseEntity.accepted().body(videoAnalysisService.acceptVideo(video, athleteId, sport));
+        } catch (IOException ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Unable to store the video for analysis."));
+        }
     }
 }
