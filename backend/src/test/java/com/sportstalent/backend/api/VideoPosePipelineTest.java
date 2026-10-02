@@ -60,4 +60,21 @@ class VideoPosePipelineTest {
 
         assertTrue(findings.stream().anyMatch(f -> f.title().equals("Arm-angle asymmetry")));
     }
+
+    @Test
+    void keepsArmFindingWhenKneeMeasurementsAreMissing() {
+        var metrics = new PoseMetrics(-1, -1, 170, 120, 0, 0);
+
+        var findings = rules.evaluate("Cricket", metrics);
+
+        assertEquals(1, findings.size());
+        assertEquals("Arm-angle asymmetry", findings.get(0).title());
+    }
+
+    @Test
+    void ignoresNonFiniteAndOutOfRangeJointAngles() {
+        var metrics = new PoseMetrics(Double.NaN, 220, 190, 20, 0, 0);
+
+        assertTrue(rules.evaluate("Football", metrics).isEmpty());
+    }
 }
