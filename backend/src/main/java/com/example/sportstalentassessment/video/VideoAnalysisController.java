@@ -75,8 +75,20 @@ public class VideoAnalysisController {
                     point(frame.get(12)), point(frame.get(14)), point(frame.get(16)));
             pipeline.evaluate(current.sport(), points).ifPresent(a -> findings.addAll(a.findings()));
         }
-        double visibility = visibilityCount == 0 ? 0 : visibilitySum / visibilityCount * 100.0;
-        service.completeLandmarkAnalysis(jobId, current.sport(), batch.frames().size(), detected, visibility, findings);
+        if (detected == 0) {
+            return ResponseEntity.unprocessableEntity().body(Map.of(
+                    "message", "No frames contained all required body landmarks with at least 0.5 visibility. Try a clearer, full-body video."
+            ));
+        }
+        Map<String, VideoAnalysisResult.VideoFinding> uniqueFindings = new java.util.LinkedHashMap<>();
+        for (VideoAnalysisResult.VideoFinding finding : findings) {
+            uniqueFindings.merge(finding.title(), finding, (previous, next) ->
+                    new VideoAnalysisResult.VideoFinding(previous.title(), previous.description(),
+                            previous.suggestion(), Math.max(previous.confidence(), next.confidence())));
+        }
+        double visibility = visibilitySum / visibilityCount * 100.0;
+        service.completeLandmarkAnalysis(jobId, current.sport(), batch.frames().size(), detected, visibility,
+                new ArrayList<>(uniqueFindings.values()));
         return ResponseEntity.ok(service.get(jobId));
     }
 
