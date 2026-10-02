@@ -1,5 +1,6 @@
 package com.example.sportstalentassessment.video;
 
+import org.opencv.core.Point;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -7,6 +8,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -15,25 +18,26 @@ import java.util.Map;
 public class VideoAnalysisController {
     private final VideoAnalysisService service;
     private final VideoProcessingService processingService;
+    private final SportTechniqueRuleService rules;
 
-    public VideoAnalysisController(VideoAnalysisService service, VideoProcessingService processingService) {
+    public VideoAnalysisController(VideoAnalysisService service, VideoProcessingService processingService,
+                                   SportTechniqueRuleService rules) {
         this.service = service;
         this.processingService = processingService;
+        this.rules = rules;
     }
 
     @PostMapping(consumes = "multipart/form-data")
-    public ResponseEntity<?> submit(
-            @RequestPart("video") MultipartFile video,
-            @RequestParam(required = false) String athleteId,
-            @RequestParam(required = false) String sport) {
+    public ResponseEntity<?> submit(@RequestPart("video") MultipartFile video,
+            @RequestParam(required = false) String athleteId, @RequestParam(required = false) String sport) {
         try {
             VideoAnalysisResult queued = service.submit(video, athleteId, sport);
             Path videoPath = service.getVideoPath(queued.jobId());
-            if (videoPath == null) {
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .body(Map.of("message", "Uploaded video could not be located."));
-            }
-            processingService.process(queued.jobId(), videoPath, sport);
+            if (videoPath == null) return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Uploaded video could not be located."));
+            // MediaPipe runs in the browser. Do not mark the job complete using the unconfigured
+            // native detector; the browser submits actual landmark samples to the endpoint below.
+            service.markProcessing(queued.jobId(), sport);
             return ResponseEntity.accepted().body(queued);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
@@ -42,6 +46,90 @@ public class VideoAnalysisController {
                     .body(Map.of("message", "Unable to store video."));
         }
     }
+
+    @PostMapping("/{jobId}/landmarks")
+    public ResponseEntity<?> submitLandmarks(@PathVariable String jobId, @RequestBody LandmarkBatch batch) {
+        VideoAnalysisResult current = service.get(jobId);
+        if (current == null) return ResponseEntity.notFound().build();
+        if (batch == null || batch.frames() == null || batch.frames().isEmpty()
+                || batch.frames().size() > 2000) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Provide between 1 and 2000 landmark frames."));
+        }
+
+        Map<String, VideoAnalysisResult.VideoFinding> findingsByTitle = new java.util.LinkedHashMap<>();
+        Map<String, Integer> findingFrameCounts = new java.util.HashMap<>();
+        int detected = 0;
+        double visibilitySum = 0;
+        int visibilityCount = 0;
+        double[] metricSums = new double[6];
+        int[] metricCounts = new int[6];
+        VideoPosePipeline pipeline = new VideoPosePipeline(rules);
+        for (List<Landmark> frame : batch.frames()) {
+            if (frame == null || frame.size() < 29) continue;
+            List<Integer> requiredIndices = List.of(11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28);
+            List<Landmark> required = requiredIndices.stream().map(frame::get).toList();
+            if (required.stream().anyMatch(p -> p == null || !finite(p) || p.visibility() < 0.5)) continue;
+            detected++;
+            for (Landmark p : required) { visibilitySum += p.visibility(); visibilityCount++; }
+            VideoPosePipeline.PosePoints points = new VideoPosePipeline.PosePoints(
+                    point(frame.get(23)), point(frame.get(25)), point(frame.get(27)),
+                    point(frame.get(24)), point(frame.get(26)), point(frame.get(28)),
+                    point(frame.get(11)), point(frame.get(13)), point(frame.get(15)),
+                    point(frame.get(12)), point(frame.get(14)), point(frame.get(16)));
+            var assessment = pipeline.evaluate(current.sport(), points);
+            if (assessment.isPresent()) {
+                var a = assessment.get();
+                for (VideoAnalysisResult.VideoFinding finding : a.findings()) {
+                    findingsByTitle.merge(finding.title(), finding, (previous, next) ->
+                            new VideoAnalysisResult.VideoFinding(previous.title(), previous.description(),
+                                    previous.suggestion(), Math.max(previous.confidence(), next.confidence())));
+                    findingFrameCounts.merge(finding.title(), 1, Integer::sum);
+                }
+                PoseMetrics m = a.metrics();
+                double[] values = {m.leftKneeAngle(), m.rightKneeAngle(), m.leftElbowAngle(),
+                        m.rightElbowAngle(), m.shoulderTilt(), m.hipTilt()};
+                for (int i = 0; i < values.length; i++) {
+                    if (Double.isFinite(values[i]) && values[i] >= 0) {
+                        metricSums[i] += values[i];
+                        metricCounts[i]++;
+                    }
+                }
+            }
+        }
+        if (detected == 0) {
+            return ResponseEntity.unprocessableEntity().body(Map.of(
+                    "message", "No frames contained all required body landmarks with at least 0.5 visibility. Try a clearer, full-body video."
+            ));
+        }
+        List<VideoAnalysisResult.VideoFinding> summarizedFindings = findingsByTitle.values().stream()
+                .map(finding -> {
+                    int observedFrames = findingFrameCounts.getOrDefault(finding.title(), 0);
+                    double occurrence = detected > 0 ? observedFrames * 100.0 / detected : 0.0;
+                    String description = finding.description() + String.format(
+                            java.util.Locale.ROOT, " Observed in %d of %d valid pose frames (%.1f%%).",
+                            observedFrames, detected, occurrence);
+                    return new VideoAnalysisResult.VideoFinding(finding.title(), description,
+                            finding.suggestion(), finding.confidence());
+                }).toList();
+        double visibility = visibilitySum / visibilityCount * 100.0;
+        PoseMetrics averageMetrics = java.util.Arrays.stream(metricCounts).noneMatch(count -> count > 0) ? null : new PoseMetrics(
+                average(metricSums[0], metricCounts[0]), average(metricSums[1], metricCounts[1]),
+                average(metricSums[2], metricCounts[2]), average(metricSums[3], metricCounts[3]),
+                average(metricSums[4], metricCounts[4]), average(metricSums[5], metricCounts[5]));
+        service.completeLandmarkAnalysis(jobId, current.sport(), batch.frames().size(), detected, visibility,
+                averageMetrics, summarizedFindings);
+        return ResponseEntity.ok(service.get(jobId));
+    }
+
+    private static double average(double sum, int count) { return count == 0 ? -1 : sum / count; }
+
+    private static boolean finite(Landmark p) {
+        return Double.isFinite(p.x()) && Double.isFinite(p.y()) && Double.isFinite(p.z())
+                && Double.isFinite(p.visibility());
+    }
+    private static Point point(Landmark p) { return new Point(p.x(), p.y()); }
+    public record Landmark(double x, double y, double z, double visibility) {}
+    public record LandmarkBatch(List<List<Landmark>> frames) {}
 
     @GetMapping("/{jobId}")
     public ResponseEntity<?> get(@PathVariable String jobId) {

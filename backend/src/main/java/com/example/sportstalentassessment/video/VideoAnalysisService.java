@@ -30,7 +30,7 @@ public class VideoAnalysisService {
         Path destination = UPLOAD_DIR.resolve(jobId + extension(video.getOriginalFilename()));
         Files.copy(video.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
 
-        VideoAnalysisResult queued = new VideoAnalysisResult(jobId, "QUEUED", sport == null ? "" : sport, 0, 0, 0, 0, List.of());
+        VideoAnalysisResult queued = new VideoAnalysisResult(jobId, "QUEUED", sport == null ? "" : sport, 0, 0, 0, 0, null, List.of());
         jobs.put(jobId, queued);
         return queued;
     }
@@ -40,7 +40,7 @@ public class VideoAnalysisService {
         if (current == null) return;
         jobs.put(jobId, new VideoAnalysisResult(current.jobId(), "PROCESSING",
                 sport == null ? current.sport() : sport, current.frames(), current.fps(),
-                current.poseDetectionRate(), current.averageLandmarkVisibility(), current.findings()));
+                current.poseDetectionRate(), current.averageLandmarkVisibility(), current.averageMetrics(), current.findings()));
     }
 
     public void markAnalyzed(String jobId, String sport, int frames, double fps,
@@ -51,7 +51,7 @@ public class VideoAnalysisService {
         double detectionRate = sampledFrames > 0 ? (poseDetectedFrames * 100.0 / sampledFrames) : 0.0;
         jobs.put(jobId, new VideoAnalysisResult(current.jobId(), "ANALYZED",
                 sport == null ? current.sport() : sport, frames, fps,
-                detectionRate, 0, findings == null ? List.of() : List.copyOf(findings)));
+                detectionRate, 0, null, findings == null ? List.of() : List.copyOf(findings)));
     }
 
     public void markFailed(String jobId, String sport) {
@@ -59,14 +59,25 @@ public class VideoAnalysisService {
         if (current == null) return;
         jobs.put(jobId, new VideoAnalysisResult(current.jobId(), "FAILED",
                 sport == null ? current.sport() : sport, current.frames(), current.fps(),
-                current.poseDetectionRate(), current.averageLandmarkVisibility(), List.of()));
+                current.poseDetectionRate(), current.averageLandmarkVisibility(), current.averageMetrics(), List.of()));
+    }
+
+    public void completeLandmarkAnalysis(String jobId, String sport, int frames, int detectedFrames,
+                                         double averageVisibility, PoseMetrics averageMetrics,
+                                         List<VideoAnalysisResult.VideoFinding> findings) {
+        VideoAnalysisResult current = jobs.get(jobId);
+        if (current == null) return;
+        double rate = frames > 0 ? detectedFrames * 100.0 / frames : 0.0;
+        jobs.put(jobId, new VideoAnalysisResult(current.jobId(), "ANALYZED",
+                sport == null ? current.sport() : sport, frames, 0.0, rate,
+                averageVisibility, averageMetrics, findings == null ? List.of() : List.copyOf(findings)));
     }
 
     public VideoAnalysisResult get(String jobId) { return jobs.get(jobId); }
 
     public Path getVideoPath(String jobId) {
-        try {
-            return Files.list(UPLOAD_DIR)
+        try (var paths = Files.list(UPLOAD_DIR)) {
+            return paths
                     .filter(path -> path.getFileName().toString().startsWith(jobId + "."))
                     .findFirst().orElse(null);
         } catch (IOException e) {
