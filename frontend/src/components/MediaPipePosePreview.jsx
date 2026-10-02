@@ -119,10 +119,12 @@ export default function MediaPipePosePreview({ file }) {
       video?.removeEventListener('play', startLoop)
       video?.removeEventListener('pause', stopLoop)
       video?.removeEventListener('ended', stopLoop)
-      landmarkerRef.current?.close()
+      const activeLandmarker = landmarkerRef.current
       landmarkerRef.current = null
-      if (landmarker && landmarker !== landmarkerRef.current) {
-        try { landmarker.close() } catch { /* already closed */ }
+      if (activeLandmarker) {
+        try { activeLandmarker.close() } catch { /* ignore cleanup errors */ }
+      } else if (landmarker) {
+        try { landmarker.close() } catch { /* ignore cleanup errors */ }
       }
       URL.revokeObjectURL(objectUrl)
     }
