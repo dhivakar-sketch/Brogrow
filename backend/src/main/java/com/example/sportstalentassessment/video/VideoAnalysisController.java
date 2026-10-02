@@ -56,7 +56,8 @@ public class VideoAnalysisController {
             return ResponseEntity.badRequest().body(Map.of("message", "Provide between 1 and 2000 landmark frames."));
         }
 
-        List<VideoAnalysisResult.VideoFinding> findings = new ArrayList<>();
+        Map<String, VideoAnalysisResult.VideoFinding> findingsByTitle = new java.util.LinkedHashMap<>();
+        Map<String, Integer> findingFrameCounts = new java.util.HashMap<>();
         int detected = 0;
         double visibilitySum = 0;
         int visibilityCount = 0;
@@ -78,7 +79,12 @@ public class VideoAnalysisController {
             var assessment = pipeline.evaluate(current.sport(), points);
             if (assessment.isPresent()) {
                 var a = assessment.get();
-                findings.addAll(a.findings());
+                for (VideoAnalysisResult.VideoFinding finding : a.findings()) {
+                    findingsByTitle.merge(finding.title(), finding, (previous, next) ->
+                            new VideoAnalysisResult.VideoFinding(previous.title(), previous.description(),
+                                    previous.suggestion(), Math.max(previous.confidence(), next.confidence())));
+                    findingFrameCounts.merge(finding.title(), 1, Integer::sum);
+                }
                 PoseMetrics m = a.metrics();
                 double[] values = {m.leftKneeAngle(), m.rightKneeAngle(), m.leftElbowAngle(),
                         m.rightElbowAngle(), m.shoulderTilt(), m.hipTilt()};
@@ -95,19 +101,23 @@ public class VideoAnalysisController {
                     "message", "No frames contained all required body landmarks with at least 0.5 visibility. Try a clearer, full-body video."
             ));
         }
-        Map<String, VideoAnalysisResult.VideoFinding> uniqueFindings = new java.util.LinkedHashMap<>();
-        for (VideoAnalysisResult.VideoFinding finding : findings) {
-            uniqueFindings.merge(finding.title(), finding, (previous, next) ->
-                    new VideoAnalysisResult.VideoFinding(previous.title(), previous.description(),
-                            previous.suggestion(), Math.max(previous.confidence(), next.confidence())));
-        }
+        List<VideoAnalysisResult.VideoFinding> summarizedFindings = findingsByTitle.values().stream()
+                .map(finding -> {
+                    int observedFrames = findingFrameCounts.getOrDefault(finding.title(), 0);
+                    double occurrence = detected > 0 ? observedFrames * 100.0 / detected : 0.0;
+                    String description = finding.description() + String.format(
+                            java.util.Locale.ROOT, " Observed in %d of %d valid pose frames (%.1f%%).",
+                            observedFrames, detected, occurrence);
+                    return new VideoAnalysisResult.VideoFinding(finding.title(), description,
+                            finding.suggestion(), finding.confidence());
+                }).toList();
         double visibility = visibilitySum / visibilityCount * 100.0;
         PoseMetrics averageMetrics = java.util.Arrays.stream(metricCounts).noneMatch(count -> count > 0) ? null : new PoseMetrics(
                 average(metricSums[0], metricCounts[0]), average(metricSums[1], metricCounts[1]),
                 average(metricSums[2], metricCounts[2]), average(metricSums[3], metricCounts[3]),
                 average(metricSums[4], metricCounts[4]), average(metricSums[5], metricCounts[5]));
         service.completeLandmarkAnalysis(jobId, current.sport(), batch.frames().size(), detected, visibility,
-                averageMetrics, new ArrayList<>(uniqueFindings.values()));
+                averageMetrics, summarizedFindings);
         return ResponseEntity.ok(service.get(jobId));
     }
 
