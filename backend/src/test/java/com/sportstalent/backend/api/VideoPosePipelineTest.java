@@ -1,6 +1,8 @@
 package com.sportstalent.backend.api;
 
 import com.example.sportstalentassessment.video.PoseMetrics;
+import com.example.sportstalentassessment.video.MovementPhaseSegmenter;
+import java.util.List;
 import com.example.sportstalentassessment.video.SportTechniqueRuleService;
 import com.example.sportstalentassessment.video.VideoPosePipeline;
 import org.junit.jupiter.api.Test;
@@ -77,4 +79,33 @@ class VideoPosePipelineTest {
 
         assertTrue(rules.evaluate("Football", metrics).isEmpty());
     }
+    @Test
+    void segmentsLowMotionSetupActiveActionAndRecovery() {
+        var samples = List.of(
+                new MovementPhaseSegmenter.Sample(0.0, 0.01),
+                new MovementPhaseSegmenter.Sample(0.5, 0.02),
+                new MovementPhaseSegmenter.Sample(1.0, 0.30),
+                new MovementPhaseSegmenter.Sample(1.5, 0.42),
+                new MovementPhaseSegmenter.Sample(2.0, 0.03),
+                new MovementPhaseSegmenter.Sample(2.5, 0.01));
+
+        var segments = MovementPhaseSegmenter.segment(samples, 0.10);
+
+        assertEquals(List.of(MovementPhaseSegmenter.Phase.SETUP,
+                MovementPhaseSegmenter.Phase.ACTION,
+                MovementPhaseSegmenter.Phase.RECOVERY),
+                segments.stream().map(MovementPhaseSegmenter.Segment::phase).toList());
+        assertEquals(1.0, segments.get(1).startSeconds(), 0.001);
+        assertEquals(1.5, segments.get(1).endSeconds(), 0.001);
+    }
+
+    @Test
+    void returnsNoSegmentsForInsufficientOrInvalidSamples() {
+        assertTrue(MovementPhaseSegmenter.segment(List.of(), 0.1).isEmpty());
+        assertTrue(MovementPhaseSegmenter.segment(List.of(
+                new MovementPhaseSegmenter.Sample(Double.NaN, 0.2),
+                new MovementPhaseSegmenter.Sample(1, 0.3),
+                new MovementPhaseSegmenter.Sample(2, 0.4)), 0.1).isEmpty());
+    }
+
 }
