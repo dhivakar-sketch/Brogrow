@@ -126,39 +126,3 @@ mvn package -DskipTests
 ```
 
 Both are expected to succeed when MySQL is running and JDBC credentials are valid.
-
-
-## MediaPipe pose analysis
-
-Video pose inference uses the local Python service in `pose-service`. Install Python
-3.10 or 3.11, then run it in a separate terminal before submitting a video.
-
-**Windows PowerShell**
-```powershell
-cd pose-service
-py -3.11 -m venv .venv
-.\\.venv\\Scripts\\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-python app.py
-```
-
-**macOS/Linux**
-```bash
-cd pose-service
-python3.11 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-python app.py
-```
-
-Check `http://127.0.0.1:8001/health`, then start the Spring Boot backend and
-React frontend. Spring Boot calls the sidecar using `POSE_SERVICE_URL`, which
-defaults to `http://127.0.0.1:8001`. Keep the service on localhost; it is intended
-for local development and has no authentication.
-
-The detector uses MediaPipe's 33 pose landmarks. Technique feedback is limited
-to the rules implemented in the Java backend and should not be treated as a
-validated coaching or medical assessment. If the sidecar is unavailable, the
-application will not invent pose landmarks.
