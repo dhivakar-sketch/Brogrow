@@ -62,6 +62,17 @@ public class VideoAnalysisService {
                 current.poseDetectionRate(), current.averageLandmarkVisibility(), List.of()));
     }
 
+    public void completeLandmarkAnalysis(String jobId, String sport, int frames, int detectedFrames,
+                                         double averageVisibility,
+                                         List<VideoAnalysisResult.VideoFinding> findings) {
+        VideoAnalysisResult current = jobs.get(jobId);
+        if (current == null) return;
+        double rate = frames > 0 ? detectedFrames * 100.0 / frames : 0.0;
+        jobs.put(jobId, new VideoAnalysisResult(current.jobId(), "ANALYZED",
+                sport == null ? current.sport() : sport, frames, 0.0, rate,
+                averageVisibility, findings == null ? List.of() : List.copyOf(findings)));
+    }
+
     public VideoAnalysisResult get(String jobId) { return jobs.get(jobId); }
 
     public Path getVideoPath(String jobId) {
