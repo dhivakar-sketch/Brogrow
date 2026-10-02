@@ -25,6 +25,7 @@ export default function VideoAnalysisPanel({ athleteId, sport, onComplete }) {
   const pollTimerRef = useRef(null)
   const pollAttemptsRef = useRef(0)
   const mountedRef = useRef(true)
+  const landmarkFramesRef = useRef([])
   const [file, setFile] = useState(null)
   const [status, setStatus] = useState('idle')
   const [progress, setProgress] = useState(0)
@@ -48,6 +49,7 @@ export default function VideoAnalysisPanel({ athleteId, sport, onComplete }) {
     const selected = event.target.files?.[0]
     setError('')
     setResult(null)
+    landmarkFramesRef.current = []
     setProgress(0)
     setStatus('idle')
     if (!selected) return
@@ -125,6 +127,16 @@ export default function VideoAnalysisPanel({ athleteId, sport, onComplete }) {
       setResult(data)
       setProgress(55)
       setStatus('analyzing')
+      const frames = landmarkFramesRef.current
+      if (!frames.length) throw new Error('No pose landmarks were captured. Play the video in the MediaPipe preview, then start the analysis again.')
+      const landmarkResponse = await fetch(`${API_BASE}/video-analysis/${encodeURIComponent(data.jobId)}/landmarks`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ frames }),
+      })
+      const landmarkResult = await landmarkResponse.json().catch(() => ({}))
+      if (!landmarkResponse.ok) throw new Error(landmarkResult.message || `Landmark analysis failed (${landmarkResponse.status}).`)
+      setResult(landmarkResult)
       await pollResult(data.jobId)
     } catch (err) {
       if (!mountedRef.current) return
@@ -174,7 +186,7 @@ export default function VideoAnalysisPanel({ athleteId, sport, onComplete }) {
         {file && <span className="video-file-meta">{(file.size / (1024 * 1024)).toFixed(1)} MB{sport ? ` · ${sport}` : ''}</span>}
       </div>
 
-      {file && <MediaPipePosePreview file={file} />}
+      {file && <MediaPipePosePreview file={file} onLandmarks={(frames) => { landmarkFramesRef.current = frames }} />}
 
       {file && <div className="video-file-row">
         <div><strong>{file.name}</strong><div className="muted">Ready to submit{sport ? ` · ${sport}` : ''}</div></div>
