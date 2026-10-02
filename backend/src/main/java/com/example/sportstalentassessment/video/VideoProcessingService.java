@@ -40,7 +40,7 @@ public class VideoProcessingService {
                 OpenCvVideoAnalyzer.Metrics base = openCvAnalyzer.analyze(videoPath);
                 PoseScan scan = scanPoses(videoPath, sport);
                 analysisService.markAnalyzed(jobId, sport, base.frames(), base.fps(),
-                        scan.poseDetectedFrames(), base.frames(), scan.findings());
+                        scan.poseDetectedFrames(), scan.sampledFrames(), scan.findings());
             } catch (RuntimeException ex) {
                 analysisService.markFailed(jobId, sport);
             }
@@ -55,11 +55,13 @@ public class VideoProcessingService {
         List<VideoAnalysisResult.VideoFinding> findings = new ArrayList<>();
         Mat frame = new Mat();
         int detected = 0;
+        int sampled = 0;
         int index = 0;
         try {
             while (capture.read(frame)) {
                 // Sampling keeps processing bounded while retaining temporal coverage.
                 if (index++ % 3 != 0) continue;
+                sampled++;
                 poseDetector.detect(frame).flatMap(points -> posePipeline.evaluate(sport, points))
                         .ifPresent(assessment -> {
                             aggregator.add(assessment.metrics());
@@ -71,8 +73,8 @@ public class VideoProcessingService {
             frame.release();
             capture.release();
         }
-        return new PoseScan(detected, findings);
+        return new PoseScan(detected, sampled, findings);
     }
 
-    private record PoseScan(int poseDetectedFrames, List<VideoAnalysisResult.VideoFinding> findings) {}
+    private record PoseScan(int poseDetectedFrames, int sampledFrames, List<VideoAnalysisResult.VideoFinding> findings) {}
 }
