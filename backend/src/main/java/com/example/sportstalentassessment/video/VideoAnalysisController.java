@@ -60,6 +60,8 @@ public class VideoAnalysisController {
         int detected = 0;
         double visibilitySum = 0;
         int visibilityCount = 0;
+        double[] metricSums = new double[6];
+        int metricCount = 0;
         VideoPosePipeline pipeline = new VideoPosePipeline(rules);
         for (List<Landmark> frame : batch.frames()) {
             if (frame == null || frame.size() < 29) continue;
@@ -73,7 +75,16 @@ public class VideoAnalysisController {
                     point(frame.get(24)), point(frame.get(26)), point(frame.get(28)),
                     point(frame.get(11)), point(frame.get(13)), point(frame.get(15)),
                     point(frame.get(12)), point(frame.get(14)), point(frame.get(16)));
-            pipeline.evaluate(current.sport(), points).ifPresent(a -> findings.addAll(a.findings()));
+            pipeline.evaluate(current.sport(), points).ifPresent(a -> {
+                findings.addAll(a.findings());
+                PoseMetrics m = a.metrics();
+                double[] values = {m.leftKneeAngle(), m.rightKneeAngle(), m.leftElbowAngle(),
+                        m.rightElbowAngle(), m.shoulderTilt(), m.hipTilt()};
+                for (int i = 0; i < values.length; i++) {
+                    if (Double.isFinite(values[i]) && values[i] >= 0) metricSums[i] += values[i];
+                }
+                metricCount++;
+            });
         }
         if (detected == 0) {
             return ResponseEntity.unprocessableEntity().body(Map.of(
@@ -87,8 +98,12 @@ public class VideoAnalysisController {
                             previous.suggestion(), Math.max(previous.confidence(), next.confidence())));
         }
         double visibility = visibilitySum / visibilityCount * 100.0;
+        PoseMetrics averageMetrics = metricCount == 0 ? null : new PoseMetrics(
+                metricSums[0] / metricCount, metricSums[1] / metricCount,
+                metricSums[2] / metricCount, metricSums[3] / metricCount,
+                metricSums[4] / metricCount, metricSums[5] / metricCount);
         service.completeLandmarkAnalysis(jobId, current.sport(), batch.frames().size(), detected, visibility,
-                new ArrayList<>(uniqueFindings.values()));
+                averageMetrics, new ArrayList<>(uniqueFindings.values()));
         return ResponseEntity.ok(service.get(jobId));
     }
 
