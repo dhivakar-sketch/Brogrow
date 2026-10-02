@@ -226,6 +226,18 @@ export default function VideoAnalysisPanel({ athleteId, sport, onComplete }) {
           <div className="video-metric-card"><span>Landmark visibility</span><strong>{formatNumber(result.averageLandmarkVisibility, 1)}<small>%</small></strong><small>Detected pose points</small></div>
         </div>
 
+        {result.status === 'ANALYZED' && result.averageMetrics && <div className="video-findings">
+          <div className="video-findings-title"><h3>Average pose metrics</h3><span>Degrees (°)</span></div>
+          <div className="video-result-grid">
+            <div className="video-metric-card"><span>Left knee</span><strong>{formatNumber(result.averageMetrics.leftKneeAngle)}°</strong><small>Average joint angle</small></div>
+            <div className="video-metric-card"><span>Right knee</span><strong>{formatNumber(result.averageMetrics.rightKneeAngle)}°</strong><small>Average joint angle</small></div>
+            <div className="video-metric-card"><span>Left elbow</span><strong>{formatNumber(result.averageMetrics.leftElbowAngle)}°</strong><small>Average joint angle</small></div>
+            <div className="video-metric-card"><span>Right elbow</span><strong>{formatNumber(result.averageMetrics.rightElbowAngle)}°</strong><small>Average joint angle</small></div>
+            <div className="video-metric-card"><span>Shoulder tilt</span><strong>{formatNumber(result.averageMetrics.shoulderTilt)}°</strong><small>Image-plane angle</small></div>
+            <div className="video-metric-card"><span>Hip tilt</span><strong>{formatNumber(result.averageMetrics.hipTilt)}°</strong><small>Image-plane angle</small></div>
+          </div>
+        </div>}
+
         {result.status === 'ANALYZED' && !hasPoseData && <div className="video-model-notice">
           <strong>Pose model not returning detections</strong>
           <p>The video was processed, but no body landmarks were detected. Technique findings and performance scores are therefore unavailable. Do not treat this as a completed athlete assessment.</p>
