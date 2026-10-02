@@ -75,7 +75,9 @@ public class VideoAnalysisController {
                     point(frame.get(24)), point(frame.get(26)), point(frame.get(28)),
                     point(frame.get(11)), point(frame.get(13)), point(frame.get(15)),
                     point(frame.get(12)), point(frame.get(14)), point(frame.get(16)));
-            pipeline.evaluate(current.sport(), points).ifPresent(a -> {
+            var assessment = pipeline.evaluate(current.sport(), points);
+            if (assessment.isPresent()) {
+                var a = assessment.get();
                 findings.addAll(a.findings());
                 PoseMetrics m = a.metrics();
                 double[] values = {m.leftKneeAngle(), m.rightKneeAngle(), m.leftElbowAngle(),
@@ -84,7 +86,7 @@ public class VideoAnalysisController {
                     if (Double.isFinite(values[i]) && values[i] >= 0) metricSums[i] += values[i];
                 }
                 metricCount++;
-            });
+            }
         }
         if (detected == 0) {
             return ResponseEntity.unprocessableEntity().body(Map.of(
