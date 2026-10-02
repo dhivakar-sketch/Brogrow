@@ -37,4 +37,4 @@ def detect():
     return jsonify({"detected": True, "landmarks": landmarks})
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=8001, threaded=True)
+    app.run(host="127.0.0.1", port=8001, threaded=False)
