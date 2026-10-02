@@ -104,6 +104,10 @@ export default function VideoAnalysisPanel({ athleteId, sport, onComplete }) {
 
   const analyze = async () => {
     if (!file || status === 'uploading' || status === 'analyzing') return
+    if (!landmarkFramesRef.current.length) {
+      setError('First play the video in the MediaPipe preview and let it detect body landmarks. Then click Analyze.')
+      return
+    }
     setError('')
     setResult(null)
     setStatus('uploading')
