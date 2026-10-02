@@ -10,6 +10,7 @@ public record VideoAnalysisResult(
         double fps,
         double poseDetectionRate,
         double averageLandmarkVisibility,
+        PoseMetrics averageMetrics,
         List<VideoFinding> findings
 ) {
     public record VideoFinding(String title, String description, String suggestion, double confidence) {}
