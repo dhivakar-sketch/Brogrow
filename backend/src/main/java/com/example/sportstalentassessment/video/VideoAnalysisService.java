@@ -76,8 +76,8 @@ public class VideoAnalysisService {
     public VideoAnalysisResult get(String jobId) { return jobs.get(jobId); }
 
     public Path getVideoPath(String jobId) {
-        try {
-            return Files.list(UPLOAD_DIR)
+        try (var paths = Files.list(UPLOAD_DIR)) {
+            return paths
                     .filter(path -> path.getFileName().toString().startsWith(jobId + "."))
                     .findFirst().orElse(null);
         } catch (IOException e) {
