@@ -61,7 +61,7 @@ public class VideoAnalysisController {
         double visibilitySum = 0;
         int visibilityCount = 0;
         double[] metricSums = new double[6];
-        int metricCount = 0;
+        int[] metricCounts = new int[6];
         VideoPosePipeline pipeline = new VideoPosePipeline(rules);
         for (List<Landmark> frame : batch.frames()) {
             if (frame == null || frame.size() < 29) continue;
@@ -83,9 +83,11 @@ public class VideoAnalysisController {
                 double[] values = {m.leftKneeAngle(), m.rightKneeAngle(), m.leftElbowAngle(),
                         m.rightElbowAngle(), m.shoulderTilt(), m.hipTilt()};
                 for (int i = 0; i < values.length; i++) {
-                    if (Double.isFinite(values[i]) && values[i] >= 0) metricSums[i] += values[i];
+                    if (Double.isFinite(values[i]) && values[i] >= 0) {
+                        metricSums[i] += values[i];
+                        metricCounts[i]++;
+                    }
                 }
-                metricCount++;
             }
         }
         if (detected == 0) {
@@ -100,14 +102,16 @@ public class VideoAnalysisController {
                             previous.suggestion(), Math.max(previous.confidence(), next.confidence())));
         }
         double visibility = visibilitySum / visibilityCount * 100.0;
-        PoseMetrics averageMetrics = metricCount == 0 ? null : new PoseMetrics(
-                metricSums[0] / metricCount, metricSums[1] / metricCount,
-                metricSums[2] / metricCount, metricSums[3] / metricCount,
-                metricSums[4] / metricCount, metricSums[5] / metricCount);
+        PoseMetrics averageMetrics = java.util.Arrays.stream(metricCounts).noneMatch(count -> count > 0) ? null : new PoseMetrics(
+                average(metricSums[0], metricCounts[0]), average(metricSums[1], metricCounts[1]),
+                average(metricSums[2], metricCounts[2]), average(metricSums[3], metricCounts[3]),
+                average(metricSums[4], metricCounts[4]), average(metricSums[5], metricCounts[5]));
         service.completeLandmarkAnalysis(jobId, current.sport(), batch.frames().size(), detected, visibility,
                 averageMetrics, new ArrayList<>(uniqueFindings.values()));
         return ResponseEntity.ok(service.get(jobId));
     }
+
+    private static double average(double sum, int count) { return count == 0 ? -1 : sum / count; }
 
     private static boolean finite(Landmark p) {
         return Double.isFinite(p.x()) && Double.isFinite(p.y()) && Double.isFinite(p.z())
