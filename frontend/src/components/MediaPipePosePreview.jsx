@@ -8,12 +8,15 @@ const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/pose_landmark
  * Browser-side MediaPipe pose preview.
  * This displays only landmarks returned by the actual model; it does not score technique.
  */
-export default function MediaPipePosePreview({ file }) {
+export default function MediaPipePosePreview({ file, onLandmarks }) {
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const landmarkerRef = useRef(null)
   const frameRef = useRef(0)
   const lastVideoTimeRef = useRef(-1)
+  const landmarksRef = useRef([])
+  const onLandmarksRef = useRef(onLandmarks)
+  onLandmarksRef.current = onLandmarks
   const [modelState, setModelState] = useState('loading')
   const [error, setError] = useState('')
   const [poseCount, setPoseCount] = useState(0)
@@ -25,6 +28,7 @@ export default function MediaPipePosePreview({ file }) {
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
     const drawing = ctx ? new DrawingUtils(ctx) : null
+    landmarksRef.current = []
     const objectUrl = URL.createObjectURL(file)
     if (video) video.src = objectUrl
 
@@ -44,6 +48,10 @@ export default function MediaPipePosePreview({ file }) {
           const result = landmarkerRef.current.detectForVideo(video, performance.now())
           const poses = result.landmarks || []
           setPoseCount(poses.length)
+          if (poses[0] && landmarksRef.current.length < 2000 && Math.floor(video.currentTime * 2) > Math.floor((video.currentTime - 1 / 30) * 2)) {
+            landmarksRef.current.push(poses[0].map(point => ({ x: point.x, y: point.y, z: point.z, visibility: point.visibility ?? 0 })))
+            onLandmarksRef.current?.(landmarksRef.current)
+          }
           for (const landmarks of poses) {
             drawing.drawConnectors(landmarks, PoseLandmarker.POSE_CONNECTIONS, { color: '#22c55e', lineWidth: 3 })
             drawing.drawLandmarks(landmarks, { color: '#38bdf8', lineWidth: 1, radius: 3 })
