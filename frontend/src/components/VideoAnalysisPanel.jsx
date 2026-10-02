@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import MediaPipePosePreview from './MediaPipePosePreview'
 
 const API_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:8080/api').replace(/\/$/, '')
 const TOKEN_KEY = 'sportsTalentAuth'
@@ -172,6 +173,8 @@ export default function VideoAnalysisPanel({ athleteId, sport, onComplete }) {
         <span className="muted">MP4, MOV or another browser-supported format · Maximum 100 MB</span>
         {file && <span className="video-file-meta">{(file.size / (1024 * 1024)).toFixed(1)} MB{sport ? ` · ${sport}` : ''}</span>}
       </div>
+
+      {file && <MediaPipePosePreview file={file} />}
 
       {file && <div className="video-file-row">
         <div><strong>{file.name}</strong><div className="muted">Ready to submit{sport ? ` · ${sport}` : ''}</div></div>
